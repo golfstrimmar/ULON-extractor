@@ -1,0 +1,14 @@
+{
+  "name": "ulon-extractor",
+  "version": "0.1.0",
+  "description": "Figma plugin — extracts design tokens, structure, texts, images and icons",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --outfile=dist/main.js --target=es2017 && copy src\\ui.html dist\\ui.html",
+    "watch": "esbuild src/main.ts --bundle --outfile=dist/main.js --target=es2017 --watch"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.96.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.4.0"
+  }
+}
