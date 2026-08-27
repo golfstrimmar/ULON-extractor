@@ -98,6 +98,49 @@ function extractBoxShadow(node: SceneNode): string | null {
   return shadows.length > 0 ? shadows.join(", ") : null;
 }
 
+function extractBorder(node: SceneNode): { border?: string; borderRadius?: string } {
+  const result: { border?: string; borderRadius?: string } = {};
+
+  // 1. Извлечение скругления углов (border-radius)
+  if ("cornerRadius" in node) {
+    if (typeof node.cornerRadius === "number" && node.cornerRadius > 0) {
+      result.borderRadius = `${Math.round(node.cornerRadius)}px`;
+    } else if (node.cornerRadius === figma.mixed) {
+      const tl = Math.round("topLeftRadius" in node && typeof node.topLeftRadius === "number" ? node.topLeftRadius : 0);
+      const tr = Math.round("topRightRadius" in node && typeof node.topRightRadius === "number" ? node.topRightRadius : 0);
+      const br = Math.round("bottomRightRadius" in node && typeof node.bottomRightRadius === "number" ? node.bottomRightRadius : 0);
+      const bl = Math.round("bottomLeftRadius" in node && typeof node.bottomLeftRadius === "number" ? node.bottomLeftRadius : 0);
+      if (tl > 0 || tr > 0 || br > 0 || bl > 0) {
+        result.borderRadius = `${tl}px ${tr}px ${br}px ${bl}px`;
+      }
+    }
+  }
+
+  // 2. Извлечение рамки (border)
+  if ("strokes" in node && Array.isArray(node.strokes) && node.strokes.length > 0) {
+    const visibleStroke = node.strokes.find((s) => s.visible !== false && s.type === "SOLID");
+    if (visibleStroke && visibleStroke.type === "SOLID") {
+      const strokeColor = rgbToHex(visibleStroke.color, visibleStroke.opacity ?? 1);
+
+      let style = "solid";
+      if ("dashPattern" in node && Array.isArray(node.dashPattern) && node.dashPattern.length > 0) {
+        style = node.dashPattern[0] <= 2 ? "dotted" : "dashed";
+      }
+
+      let weight = 1;
+      if ("strokeWeight" in node && typeof node.strokeWeight === "number") {
+        weight = Math.round(node.strokeWeight);
+      }
+
+      if (weight > 0 && strokeColor) {
+        result.border = `${weight}px ${style} ${strokeColor}`;
+      }
+    }
+  }
+
+  return result;
+}
+
 function slugify(text: string): string {
   return text
     .toLowerCase()
@@ -162,7 +205,6 @@ function scanNode(
   if (node.visible === false) return null;
 
   const nodeBgColor = extractBackgroundColor(node) || parentBgColor;
-  const nodeBoxShadow = extractBoxShadow(node);
 
   // 1. Сбор цветов из заливок, обводок, фонов, теней
   if ("fills" in node) {
@@ -245,6 +287,8 @@ function scanNode(
     const fontSlug = fontFamily.toLowerCase().replace(/[^a-z0-9]+/g, "-");
     const className = `font-${fontSlug}-${fontWeight}-${fontSize}`;
 
+    const borderInfo = extractBorder(node);
+
     const textItem: TextItem = {
       id: node.id,
       tag: "p",
@@ -257,10 +301,12 @@ function scanNode(
       textAlign,
       color: textColor,
       backgroundColor: nodeBgColor,
-      boxShadow: nodeBoxShadow,
       className,
       section: currentSection || node.name,
     };
+
+    if (borderInfo.border) textItem.border = borderInfo.border;
+    if (borderInfo.borderRadius) textItem.borderRadius = borderInfo.borderRadius;
 
     textItems.push(textItem);
 
@@ -269,14 +315,12 @@ function scanNode(
       name: node.name,
       tag: "p",
       className,
-      backgroundColor: nodeBgColor,
-      boxShadow: nodeBoxShadow,
       text: rawText,
       children: [],
     };
   }
 
-  // 3. Обработка контейнеров (Frame, Group, Section, Component)
+  // 3. Обработка контейнеров/оберток (Frame, Group, Section, Component)
   const isSectionContainer =
     node.type === "FRAME" ||
     node.type === "SECTION" ||
@@ -304,17 +348,31 @@ function scanNode(
     }
   }
 
-  // Возвращаем структуру div только если внутри есть дети или это важный контейнер
+  // Возвращаем структуру div только если внутри есть дети или это контейнер
   if (childStructureNodes.length > 0 || isSectionContainer) {
-    return {
+    const shadow = extractBoxShadow(node);
+    const borderInfo = extractBorder(node);
+
+    const structNode: StructureNode = {
       id: node.id,
       name: node.name,
       tag: "div",
       className: `section-${slugify(node.name)}`,
       backgroundColor: nodeBgColor,
-      boxShadow: nodeBoxShadow,
       children: childStructureNodes,
     };
+
+    if (shadow) {
+      structNode.boxShadow = shadow;
+    }
+    if (borderInfo.border) {
+      structNode.border = borderInfo.border;
+    }
+    if (borderInfo.borderRadius) {
+      structNode.borderRadius = borderInfo.borderRadius;
+    }
+
+    return structNode;
   }
 
   return null;
@@ -339,7 +397,7 @@ export async function extractFromNodes(
     }
   };
 
-  // 1. Обход дерева, сбор цветов, текстов, теней и иерархической структуры
+  // 1. Обход дерева, сбор цветов, текстов, теней, рамок и структуры
   for (const root of roots) {
     const structNode = scanNode(
       root,
