@@ -70,27 +70,27 @@
 
     .stats {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
     }
 
     .stat {
       background: #2a2a2a;
       border: 1px solid #3a3a3a;
       border-radius: 6px;
-      padding: 8px 10px;
+      padding: 6px 8px;
       text-align: center;
     }
 
     .stat-label {
-      font-size: 10px;
+      font-size: 9px;
       color: #888;
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
 
     .stat-value {
-      font-size: 18px;
+      font-size: 16px;
       font-weight: 700;
       color: #fff;
       margin-top: 2px;
@@ -98,34 +98,37 @@
 
     .copy-btn {
       width: 100%;
-      padding: 10px;
-      background: #2a2a2a;
-      border: 1px solid #3a3a3a;
-      color: #0d99ff;
+      padding: 11px;
+      background: #4caf50;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
+      border: none;
       border-radius: 6px;
-      font-size: 12px;
-      font-weight: 600;
       cursor: pointer;
+      transition: background 0.15s;
       margin-top: auto;
     }
 
-    .copy-btn:hover { background: #333; }
-    .copy-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .copy-btn:hover { background: #43a047; }
+    .copy-btn:disabled { background: #333; color: #666; cursor: not-allowed; }
 
-    textarea {
+    textarea#output {
       display: none;
+      position: absolute;
+      left: -9999px;
     }
   </style>
 </head>
 <body>
   <div>
     <h2>ULON Extractor</h2>
-    <div class="subtitle">Извлекает цвета, картинки, тексты и структуру</div>
+    <div class="subtitle">Экспорт цветов, картинок, SVG, текстов и секций</div>
   </div>
 
   <div class="buttons">
-    <button id="btn-all">Вся страница</button>
     <button id="btn-selection">Выделение</button>
+    <button id="btn-all">Вся страница</button>
   </div>
 
   <div id="status">Готов к работе</div>
@@ -140,11 +143,15 @@
       <div class="stat-value" id="cnt-images">0</div>
     </div>
     <div class="stat">
+      <div class="stat-label">SVG</div>
+      <div class="stat-value" id="cnt-svgs">0</div>
+    </div>
+    <div class="stat">
       <div class="stat-label">Текстов</div>
       <div class="stat-value" id="cnt-texts">0</div>
     </div>
-    <div class="stat">
-      <div class="stat-label">Секций</div>
+    <div class="stat" style="grid-column: span 2;">
+      <div class="stat-label">Секций структуры</div>
       <div class="stat-value" id="cnt-sections">0</div>
     </div>
   </div>
@@ -161,6 +168,7 @@
     const statsEl = document.getElementById("stats");
     const cntColors = document.getElementById("cnt-colors");
     const cntImages = document.getElementById("cnt-images");
+    const cntSvgs = document.getElementById("cnt-svgs");
     const cntTexts = document.getElementById("cnt-texts");
     const cntSections = document.getElementById("cnt-sections");
 
@@ -245,16 +253,19 @@
           ? lightResult[2].texts : [];
         const structure = Array.isArray(lightResult) && lightResult[3]?.structure
           ? lightResult[3].structure : [];
+        const svgs = Array.isArray(lightResult) && lightResult[4]?.svgs
+          ? lightResult[4].svgs : [];
 
         cntColors.textContent = colors.length;
         cntImages.textContent = images.length;
+        cntSvgs.textContent = svgs.length;
         cntTexts.textContent = texts.length;
         cntSections.textContent = structure.length;
         statsEl.style.display = "grid";
 
-        status.textContent = `Готово: ${colors.length} цветов, ${images.length} картинок, ${texts.length} текстов`;
+        status.textContent = `Готово: ${colors.length} цветов, ${images.length} картинок, ${svgs.length} SVG, ${texts.length} текстов`;
         status.className = "ok";
-        btnCopy.disabled = colors.length === 0 && images.length === 0 && texts.length === 0;
+        btnCopy.disabled = colors.length === 0 && images.length === 0 && texts.length === 0 && svgs.length === 0;
       }
     };
   </script>

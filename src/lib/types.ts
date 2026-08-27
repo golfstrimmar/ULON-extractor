@@ -51,9 +51,18 @@ export interface StructureNode {
   children: StructureNode[];
 }
 
+export interface SvgItem {
+  id: string;
+  name: string;
+  content: string; // XML-строка SVG
+  width?: number;
+  height?: number;
+}
+
 export type ExtractorResult = [
   { colors: ColorItem[] },
   { images: ImageItem[] },
   { texts: TextItem[] },
-  { structure: StructureNode[] }
+  { structure: StructureNode[] },
+  { svgs: SvgItem[] }
 ];

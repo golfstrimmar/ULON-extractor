@@ -1,6 +1,6 @@
 import { extractFromNodes } from "./traverse";
 
-figma.showUI(__html__, { width: 420, height: 320, title: "ULON Extractor" });
+figma.showUI(__html__, { width: 420, height: 380, title: "ULON Extractor" });
 
 figma.ui.onmessage = async (msg: { type: string }) => {
   try {

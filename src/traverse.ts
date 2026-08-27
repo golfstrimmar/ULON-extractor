@@ -5,10 +5,43 @@ import type {
   ImageItem,
   RgbColor,
   StructureNode,
+  SvgItem,
   TextItem,
 } from "./lib/types";
 
-// ─── Вспомогательные функции для изображений ────────────────────────────────
+// ─── Вспомогательные функции для изображений и SVG ──────────────────────────
+
+function decodeUtf8(bytes: Uint8Array): string {
+  if (typeof TextDecoder !== "undefined") {
+    try {
+      return new TextDecoder("utf-8").decode(bytes);
+    } catch {
+      // fallback below
+    }
+  }
+  let out = "";
+  let i = 0;
+  while (i < bytes.length) {
+    const c = bytes[i++];
+    if (c < 0x80) {
+      out += String.fromCharCode(c);
+    } else if (c > 0xbf && c < 0xe0) {
+      const c2 = bytes[i++];
+      out += String.fromCharCode(((c & 0x1f) << 6) | (c2 & 0x3f));
+    } else if (c > 0xdf && c < 0xf0) {
+      const c2 = bytes[i++];
+      const c3 = bytes[i++];
+      out += String.fromCharCode(((c & 0x0f) << 12) | ((c2 & 0x3f) << 6) | (c3 & 0x3f));
+    } else {
+      const c2 = bytes[i++];
+      const c3 = bytes[i++];
+      const c4 = bytes[i++];
+      const u = (((c & 0x07) << 18) | ((c2 & 0x3f) << 12) | ((c3 & 0x3f) << 6) | (c4 & 0x3f)) - 0x10000;
+      out += String.fromCharCode(0xd800 + (u >> 10), 0xdc00 + (u & 0x3ff));
+    }
+  }
+  return out;
+}
 
 async function exportNodeAsDataUrl(node: SceneNode): Promise<string | null> {
   try {
@@ -33,6 +66,28 @@ async function exportNodeAsDataUrl(node: SceneNode): Promise<string | null> {
     return `data:image/jpeg;base64,${base64}`;
   } catch (err) {
     console.warn("Failed to export image node:", node.name, err);
+    return null;
+  }
+}
+
+async function exportNodeAsSvg(node: SceneNode): Promise<string | null> {
+  try {
+    if (node.removed || !node.visible) return null;
+    if (!("exportAsync" in node)) return null;
+
+    const bytes = await node.exportAsync({
+      format: "SVG",
+      svgOutlineText: true,
+      svgIdAttribute: false,
+    });
+
+    if (!bytes || bytes.length === 0) return null;
+
+    let svgStr = decodeUtf8(bytes);
+    svgStr = svgStr.replace(/<\?xml.*?\?>/i, "").trim();
+    return svgStr;
+  } catch (err) {
+    console.warn("Failed to export SVG node:", node.name, err);
     return null;
   }
 }
@@ -148,6 +203,86 @@ function slugify(text: string): string {
     .replace(/^-+|-+$/g, "") || "box";
 }
 
+// ─── Распознавание SVG/Иконок ────────────────────────────────────────────────
+
+function isSvgCandidate(node: SceneNode): boolean {
+  if (node.visible === false) return false;
+
+  // 1. Прямые векторные ноды
+  if (
+    node.type === "VECTOR" ||
+    node.type === "BOOLEAN_OPERATION" ||
+    node.type === "STAR" ||
+    node.type === "POLYGON" ||
+    node.type === "ELLIPSE" ||
+    node.type === "LINE"
+  ) {
+    return true;
+  }
+
+  // 2. Контейнеры (Frame, Group, Component, Instance), которые представляют собой иконку
+  if (
+    node.type === "FRAME" ||
+    node.type === "GROUP" ||
+    node.type === "COMPONENT" ||
+    node.type === "INSTANCE"
+  ) {
+    const width = "width" in node && typeof node.width === "number" ? node.width : 0;
+    const height = "height" in node && typeof node.height === "number" ? node.height : 0;
+
+    const isSmall = width > 0 && width <= 128 && height > 0 && height <= 128;
+
+    const nameLower = node.name.toLowerCase();
+    const hasIconName =
+      nameLower.includes("icon") ||
+      nameLower.startsWith("ic_") ||
+      nameLower.startsWith("ic-") ||
+      nameLower.includes("svg") ||
+      nameLower.includes("logo") ||
+      nameLower.includes("vector") ||
+      nameLower.includes("glyph");
+
+    let hasVectors = false;
+    let hasImages = false;
+    let hasLongText = false;
+
+    function checkChild(child: SceneNode) {
+      if (
+        child.type === "VECTOR" ||
+        child.type === "BOOLEAN_OPERATION" ||
+        child.type === "STAR" ||
+        child.type === "POLYGON" ||
+        child.type === "ELLIPSE" ||
+        child.type === "LINE"
+      ) {
+        hasVectors = true;
+      }
+      if ("fills" in child && Array.isArray(child.fills)) {
+        for (const f of child.fills) {
+          if (f.type === "IMAGE") hasImages = true;
+        }
+      }
+      if (child.type === "TEXT" && child.characters.trim().length > 4) {
+        hasLongText = true;
+      }
+      if ("children" in child) {
+        for (const c of child.children) {
+          checkChild(c);
+        }
+      }
+    }
+
+    checkChild(node);
+
+    if (hasImages || hasLongText) return false;
+
+    if (hasIconName && (hasVectors || isSmall)) return true;
+    if (isSmall && hasVectors) return true;
+  }
+
+  return false;
+}
+
 // ─── Сбор цветов и изображений ──────────────────────────────────────────────
 
 interface ImageCandidate {
@@ -200,6 +335,7 @@ function scanNode(
   parentBgColor: string | null,
   addColor: (color: RgbColor, opacity?: number) => void,
   imageCandidates: ImageCandidate[],
+  svgCandidates: SceneNode[],
   textItems: TextItem[]
 ): StructureNode | null {
   if (node.visible === false) return null;
@@ -239,7 +375,14 @@ function scanNode(
     }
   }
 
-  // 2. Обработка текстовой ноды
+  // 2. Проверка: является ли нода SVG-иконкой
+  if (isSvgCandidate(node)) {
+    svgCandidates.push(node);
+    // Для иконки добавляем ее цвета, но внутрь как дерево секций не углубляемся
+    return null;
+  }
+
+  // 3. Обработка текстовой ноды
   if (node.type === "TEXT") {
     const rawText = node.characters.trim();
     if (!rawText) return null;
@@ -320,7 +463,7 @@ function scanNode(
     };
   }
 
-  // 3. Обработка контейнеров/оберток (Frame, Group, Section, Component)
+  // 4. Обработка контейнеров/оберток (Frame, Group, Section, Component)
   const isSectionContainer =
     node.type === "FRAME" ||
     node.type === "SECTION" ||
@@ -340,6 +483,7 @@ function scanNode(
         nodeBgColor,
         addColor,
         imageCandidates,
+        svgCandidates,
         textItems
       );
       if (childNode) {
@@ -386,6 +530,7 @@ export async function extractFromNodes(
   const seenColors = new Set<string>();
   const colors: ColorItem[] = [];
   const rawImageCandidates: ImageCandidate[] = [];
+  const rawSvgCandidates: SceneNode[] = [];
   const texts: TextItem[] = [];
   const structure: StructureNode[] = [];
 
@@ -397,7 +542,7 @@ export async function extractFromNodes(
     }
   };
 
-  // 1. Обход дерева, сбор цветов, текстов, теней, рамок и структуры
+  // 1. Обход дерева, сбор цветов, текстов, SVG-кандидатов и структуры
   for (const root of roots) {
     const structNode = scanNode(
       root,
@@ -405,6 +550,7 @@ export async function extractFromNodes(
       null,
       addColor,
       rawImageCandidates,
+      rawSvgCandidates,
       texts
     );
     if (structNode) {
@@ -437,5 +583,24 @@ export async function extractFromNodes(
     });
   }
 
-  return [{ colors }, { images }, { texts }, { structure }];
+  // 4. Экспорт SVG / Иконок
+  const seenSvgIds = new Set<string>();
+  const svgs: SvgItem[] = [];
+  for (const node of rawSvgCandidates) {
+    if (seenSvgIds.has(node.id)) continue;
+    seenSvgIds.add(node.id);
+
+    const svgContent = await exportNodeAsSvg(node);
+    if (svgContent && svgContent.includes("<svg")) {
+      svgs.push({
+        id: node.id,
+        name: node.name,
+        content: svgContent,
+        width: Math.round("width" in node ? (node as LayoutMixin).width : 24),
+        height: Math.round("height" in node ? (node as LayoutMixin).height : 24),
+      });
+    }
+  }
+
+  return [{ colors }, { images }, { texts }, { structure }, { svgs }];
 }
