@@ -75,6 +75,29 @@ function extractBackgroundColor(node: SceneNode): string | null {
   return null;
 }
 
+function extractBoxShadow(node: SceneNode): string | null {
+  if (!("effects" in node) || !Array.isArray(node.effects)) return null;
+
+  const shadows: string[] = [];
+
+  for (const effect of node.effects) {
+    if (effect.visible === false) continue;
+    if (effect.type === "DROP_SHADOW" || effect.type === "INNER_SHADOW") {
+      const isInset = effect.type === "INNER_SHADOW";
+      const x = Math.round(effect.offset.x);
+      const y = Math.round(effect.offset.y);
+      const blur = Math.round(effect.radius);
+      const spread = Math.round(effect.spread ?? 0);
+      const color = rgbToCss(effect.color, effect.color.a);
+
+      const shadowCss = `${isInset ? "inset " : ""}${x}px ${y}px ${blur}px ${spread}px ${color}`;
+      shadows.push(shadowCss);
+    }
+  }
+
+  return shadows.length > 0 ? shadows.join(", ") : null;
+}
+
 function slugify(text: string): string {
   return text
     .toLowerCase()
@@ -139,6 +162,7 @@ function scanNode(
   if (node.visible === false) return null;
 
   const nodeBgColor = extractBackgroundColor(node) || parentBgColor;
+  const nodeBoxShadow = extractBoxShadow(node);
 
   // 1. Сбор цветов из заливок, обводок, фонов, теней
   if ("fills" in node) {
@@ -168,7 +192,7 @@ function scanNode(
     for (const effect of node.effects) {
       if (effect.visible === false) continue;
       if (effect.type === "DROP_SHADOW" || effect.type === "INNER_SHADOW") {
-        addColor(effect.color, 1);
+        addColor(effect.color, effect.color.a ?? 1);
       }
     }
   }
@@ -233,6 +257,7 @@ function scanNode(
       textAlign,
       color: textColor,
       backgroundColor: nodeBgColor,
+      boxShadow: nodeBoxShadow,
       className,
       section: currentSection || node.name,
     };
@@ -245,6 +270,7 @@ function scanNode(
       tag: "p",
       className,
       backgroundColor: nodeBgColor,
+      boxShadow: nodeBoxShadow,
       text: rawText,
       children: [],
     };
@@ -286,6 +312,7 @@ function scanNode(
       tag: "div",
       className: `section-${slugify(node.name)}`,
       backgroundColor: nodeBgColor,
+      boxShadow: nodeBoxShadow,
       children: childStructureNodes,
     };
   }
@@ -312,7 +339,7 @@ export async function extractFromNodes(
     }
   };
 
-  // 1. Обход дерева, сбор цветов, текстов и иерархической структуры
+  // 1. Обход дерева, сбор цветов, текстов, теней и иерархической структуры
   for (const root of roots) {
     const structNode = scanNode(
       root,

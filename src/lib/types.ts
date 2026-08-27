@@ -32,6 +32,7 @@ export interface TextItem {
   textAlign: string;
   color: string | null;
   backgroundColor: string | null;
+  boxShadow?: string | null;
   className: string;
   section: string;
 }
@@ -42,6 +43,7 @@ export interface StructureNode {
   tag: "div" | "p";
   className?: string;
   backgroundColor?: string | null;
+  boxShadow?: string | null;
   text?: string;
   children: StructureNode[];
 }
