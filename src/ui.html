@@ -69,12 +69,12 @@
     #status.ok { color: #4caf50; }
 
     .stats {
-      display: flex;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
       gap: 8px;
     }
 
     .stat {
-      flex: 1;
       background: #2a2a2a;
       border: 1px solid #3a3a3a;
       border-radius: 6px;
@@ -84,13 +84,13 @@
 
     .stat-label {
       font-size: 10px;
-      color: #666;
+      color: #888;
       text-transform: uppercase;
       letter-spacing: 0.5px;
     }
 
     .stat-value {
-      font-size: 20px;
+      font-size: 18px;
       font-weight: 700;
       color: #fff;
       margin-top: 2px;
@@ -120,7 +120,7 @@
 <body>
   <div>
     <h2>ULON Extractor</h2>
-    <div class="subtitle">Извлекает цвета и изображения</div>
+    <div class="subtitle">Извлекает цвета, картинки, тексты и структуру</div>
   </div>
 
   <div class="buttons">
@@ -139,6 +139,14 @@
       <div class="stat-label">Картинок</div>
       <div class="stat-value" id="cnt-images">0</div>
     </div>
+    <div class="stat">
+      <div class="stat-label">Текстов</div>
+      <div class="stat-value" id="cnt-texts">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Секций</div>
+      <div class="stat-value" id="cnt-sections">0</div>
+    </div>
   </div>
 
   <button class="copy-btn" id="btn-copy" disabled>Скопировать JSON</button>
@@ -153,6 +161,8 @@
     const statsEl = document.getElementById("stats");
     const cntColors = document.getElementById("cnt-colors");
     const cntImages = document.getElementById("cnt-images");
+    const cntTexts = document.getElementById("cnt-texts");
+    const cntSections = document.getElementById("cnt-sections");
 
     let lightResult = null;
 
@@ -231,17 +241,22 @@
           ? lightResult[0].colors : [];
         const images = Array.isArray(lightResult) && lightResult[1]?.images
           ? lightResult[1].images : [];
+        const texts = Array.isArray(lightResult) && lightResult[2]?.texts
+          ? lightResult[2].texts : [];
+        const structure = Array.isArray(lightResult) && lightResult[3]?.structure
+          ? lightResult[3].structure : [];
 
         cntColors.textContent = colors.length;
         cntImages.textContent = images.length;
-        statsEl.style.display = "flex";
+        cntTexts.textContent = texts.length;
+        cntSections.textContent = structure.length;
+        statsEl.style.display = "grid";
 
-        status.textContent = `Готово: ${colors.length} цветов, ${images.length} картинок`;
+        status.textContent = `Готово: ${colors.length} цветов, ${images.length} картинок, ${texts.length} текстов`;
         status.className = "ok";
-        btnCopy.disabled = colors.length === 0 && images.length === 0;
+        btnCopy.disabled = colors.length === 0 && images.length === 0 && texts.length === 0;
       }
     };
   </script>
 </body>
 </html>
-
