@@ -1,273 +1,336 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
-<head>
-  <meta charset="UTF-8" />
-  <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    <head>
+        <meta charset="UTF-8" />
+        <style>
+            * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
 
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      font-size: 13px;
-      background: #1e1e1e;
-      color: #e0e0e0;
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      padding: 16px;
-      gap: 12px;
-    }
+            body {
+                font-family:
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                font-size: 13px;
+                background: #1e1e1e;
+                color: #e0e0e0;
+                display: flex;
+                flex-direction: column;
+                height: 100vh;
+                padding: 16px;
+                gap: 12px;
+            }
 
-    h2 {
-      font-size: 15px;
-      font-weight: 600;
-      color: #fff;
-      letter-spacing: 0.3px;
-    }
+            h2 {
+                font-size: 15px;
+                font-weight: 600;
+                color: #fff;
+                letter-spacing: 0.3px;
+            }
 
-    .subtitle {
-      font-size: 11px;
-      color: #888;
-      margin-top: 2px;
-    }
+            .subtitle {
+                font-size: 11px;
+                color: #888;
+                margin-top: 2px;
+            }
 
-    .buttons {
-      display: flex;
-      gap: 8px;
-    }
+            .buttons {
+                display: flex;
+                gap: 8px;
+            }
 
-    button {
-      flex: 1;
-      padding: 9px 12px;
-      border: none;
-      border-radius: 6px;
-      font-size: 12px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: opacity 0.15s;
-    }
+            button {
+                flex: 1;
+                padding: 9px 12px;
+                border: none;
+                border-radius: 6px;
+                font-size: 12px;
+                font-weight: 600;
+                cursor: pointer;
+                transition: opacity 0.15s;
+            }
 
-    button:hover { opacity: 0.85; }
-    button:disabled { opacity: 0.4; cursor: not-allowed; }
+            button:hover {
+                opacity: 0.85;
+            }
+            button:disabled {
+                opacity: 0.4;
+                cursor: not-allowed;
+            }
 
-    #btn-all {
-      background: #4a4a4a;
-      color: #fff;
-    }
+            #btn-all {
+                background: #4a4a4a;
+                color: #fff;
+            }
 
-    #btn-selection {
-      background: #0d99ff;
-      color: #fff;
-    }
+            #btn-selection {
+                background: #0d99ff;
+                color: #fff;
+            }
 
-    #status {
-      font-size: 11px;
-      color: #aaa;
-      min-height: 16px;
-    }
+            #status {
+                font-size: 11px;
+                color: #aaa;
+                min-height: 16px;
+            }
 
-    #status.error { color: #ff6b6b; }
-    #status.ok { color: #4caf50; }
+            #status.error {
+                color: #ff6b6b;
+            }
+            #status.ok {
+                color: #4caf50;
+            }
 
-    .stats {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 6px;
-    }
+            .stats {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 6px;
+            }
 
-    .stat {
-      background: #2a2a2a;
-      border: 1px solid #3a3a3a;
-      border-radius: 6px;
-      padding: 6px 8px;
-      text-align: center;
-    }
+            .stat {
+                background: #2a2a2a;
+                border: 1px solid #3a3a3a;
+                border-radius: 6px;
+                padding: 6px 8px;
+                text-align: center;
+            }
 
-    .stat-label {
-      font-size: 9px;
-      color: #888;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
+            .stat-label {
+                font-size: 9px;
+                color: #888;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
 
-    .stat-value {
-      font-size: 16px;
-      font-weight: 700;
-      color: #fff;
-      margin-top: 2px;
-    }
+            .stat-value {
+                font-size: 16px;
+                font-weight: 700;
+                color: #fff;
+                margin-top: 2px;
+            }
 
-    .copy-btn {
-      width: 100%;
-      padding: 11px;
-      background: #4caf50;
-      color: #fff;
-      font-size: 13px;
-      font-weight: 700;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: background 0.15s;
-      margin-top: auto;
-    }
+            .copy-btn {
+                width: 100%;
+                padding: 11px;
+                background: #4caf50;
+                color: #fff;
+                font-size: 13px;
+                font-weight: 700;
+                border: none;
+                border-radius: 6px;
+                cursor: pointer;
+                transition: background 0.15s;
+                margin-top: auto;
+            }
 
-    .copy-btn:hover { background: #43a047; }
-    .copy-btn:disabled { background: #333; color: #666; cursor: not-allowed; }
+            .copy-btn:hover {
+                background: #43a047;
+            }
+            .copy-btn:disabled {
+                background: #333;
+                color: #666;
+                cursor: not-allowed;
+            }
 
-    textarea#output {
-      display: none;
-      position: absolute;
-      left: -9999px;
-    }
-  </style>
-</head>
-<body>
-  <div>
-    <h2>ULON Extractor</h2>
-    <div class="subtitle">Экспорт цветов, картинок, SVG, текстов и секций</div>
-  </div>
+            textarea#output {
+                display: none;
+                position: absolute;
+                left: -9999px;
+            }
+        </style>
+    </head>
+    <body>
+        <div>
+            <h2>ULON Extractor</h2>
+            <div class="subtitle">
+                Экспорт цветов, шрифтов, картинок, SVG, текстов и секций
+            </div>
+        </div>
 
-  <div class="buttons">
-    <button id="btn-selection">Выделение</button>
-    <button id="btn-all">Вся страница</button>
-  </div>
+        <div class="buttons">
+            <button id="btn-selection">Выделение</button>
+            <button id="btn-all">Вся страница</button>
+        </div>
 
-  <div id="status">Готов к работе</div>
+        <div id="status">Готов к работе</div>
 
-  <div class="stats" id="stats" style="display:none">
-    <div class="stat">
-      <div class="stat-label">Цветов</div>
-      <div class="stat-value" id="cnt-colors">0</div>
-    </div>
-    <div class="stat">
-      <div class="stat-label">Картинок</div>
-      <div class="stat-value" id="cnt-images">0</div>
-    </div>
-    <div class="stat">
-      <div class="stat-label">SVG</div>
-      <div class="stat-value" id="cnt-svgs">0</div>
-    </div>
-    <div class="stat">
-      <div class="stat-label">Текстов</div>
-      <div class="stat-value" id="cnt-texts">0</div>
-    </div>
-    <div class="stat" style="grid-column: span 2;">
-      <div class="stat-label">Секций структуры</div>
-      <div class="stat-value" id="cnt-sections">0</div>
-    </div>
-  </div>
+        <!-- Статистика: ровно 6 карточек (3 в ряд х 2 строки) -->
+        <div class="stats" id="stats" style="display: none">
+            <div class="stat">
+                <div class="stat-label">Цветов</div>
+                <div class="stat-value" id="cnt-colors">0</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Шрифтов</div>
+                <div class="stat-value" id="cnt-fonts">0</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Картинок</div>
+                <div class="stat-value" id="cnt-images">0</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">SVG</div>
+                <div class="stat-value" id="cnt-svgs">0</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Текстов</div>
+                <div class="stat-value" id="cnt-texts">0</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Секций</div>
+                <div class="stat-value" id="cnt-sections">0</div>
+            </div>
+        </div>
 
-  <button class="copy-btn" id="btn-copy" disabled>Скопировать JSON</button>
-  <textarea id="output"></textarea>
+        <button class="copy-btn" id="btn-copy" disabled>
+            Скопировать JSON
+        </button>
+        <textarea id="output"></textarea>
 
-  <script>
-    const btnAll = document.getElementById("btn-all");
-    const btnSelection = document.getElementById("btn-selection");
-    const btnCopy = document.getElementById("btn-copy");
-    const status = document.getElementById("status");
-    const output = document.getElementById("output");
-    const statsEl = document.getElementById("stats");
-    const cntColors = document.getElementById("cnt-colors");
-    const cntImages = document.getElementById("cnt-images");
-    const cntSvgs = document.getElementById("cnt-svgs");
-    const cntTexts = document.getElementById("cnt-texts");
-    const cntSections = document.getElementById("cnt-sections");
+        <script>
+            const btnAll = document.getElementById("btn-all");
+            const btnSelection = document.getElementById("btn-selection");
+            const btnCopy = document.getElementById("btn-copy");
+            const status = document.getElementById("status");
+            const output = document.getElementById("output");
+            const statsEl = document.getElementById("stats");
 
-    let lightResult = null;
+            const cntColors = document.getElementById("cnt-colors");
+            const cntFonts = document.getElementById("cnt-fonts"); // 🌟
+            const cntImages = document.getElementById("cnt-images");
+            const cntSvgs = document.getElementById("cnt-svgs");
+            const cntTexts = document.getElementById("cnt-texts");
+            const cntSections = document.getElementById("cnt-sections");
 
-    function setButtons(disabled) {
-      btnAll.disabled = disabled;
-      btnSelection.disabled = disabled;
-    }
+            let lightResult = null;
 
-    btnAll.addEventListener("click", () => {
-      parent.postMessage({ pluginMessage: { type: "EXTRACT_ALL" } }, "*");
-      status.textContent = "Сканирую...";
-      status.className = "";
-      setButtons(true);
-      btnCopy.disabled = true;
-    });
+            function setButtons(disabled) {
+                btnAll.disabled = disabled;
+                btnSelection.disabled = disabled;
+            }
 
-    btnSelection.addEventListener("click", () => {
-      parent.postMessage({ pluginMessage: { type: "EXTRACT_SELECTION" } }, "*");
-      status.textContent = "Сканирую...";
-      status.className = "";
-      setButtons(true);
-      btnCopy.disabled = true;
-    });
+            btnAll.addEventListener("click", () => {
+                parent.postMessage(
+                    { pluginMessage: { type: "EXTRACT_ALL" } },
+                    "*",
+                );
+                status.textContent = "Сканирую...";
+                status.className = "";
+                setButtons(true);
+                btnCopy.disabled = true;
+            });
 
-    btnCopy.addEventListener("click", async () => {
-      if (!lightResult) return;
+            btnSelection.addEventListener("click", () => {
+                parent.postMessage(
+                    { pluginMessage: { type: "EXTRACT_SELECTION" } },
+                    "*",
+                );
+                status.textContent = "Сканирую...";
+                status.className = "";
+                setButtons(true);
+                btnCopy.disabled = true;
+            });
 
-      const json = JSON.stringify(lightResult, null, 2);
-      const sizeKb = Math.round(json.length / 1024);
+            btnCopy.addEventListener("click", async () => {
+                if (!lightResult) return;
 
-      btnCopy.disabled = true;
-      btnCopy.textContent = "Копирую...";
+                const json = JSON.stringify(lightResult, null, 2);
+                const sizeKb = Math.round(json.length / 1024);
 
-      try {
-        await navigator.clipboard.writeText(json);
-        btnCopy.textContent = `Скопировано! (${sizeKb} KB)`;
-      } catch {
-        try {
-          output.value = json;
-          output.style.display = "block";
-          output.focus();
-          output.select();
-          const ok = document.execCommand("copy");
-          output.style.display = "none";
-          if (!ok) throw new Error("failed");
-          btnCopy.textContent = `Скопировано! (${sizeKb} KB)`;
-        } catch {
-          output.style.display = "none";
-          status.textContent = "Ошибка копирования";
-          status.className = "error";
-          btnCopy.textContent = "Скопировать JSON";
-          btnCopy.disabled = false;
-          return;
-        }
-      }
+                btnCopy.disabled = true;
+                btnCopy.textContent = "Копирую...";
 
-      btnCopy.disabled = false;
-      setTimeout(() => { btnCopy.textContent = "Скопировать JSON"; }, 2000);
-    });
+                try {
+                    await navigator.clipboard.writeText(json);
+                    btnCopy.textContent = `Скопировано! (${sizeKb} KB)`;
+                } catch {
+                    try {
+                        output.value = json;
+                        output.style.display = "block";
+                        output.focus();
+                        output.select();
+                        const ok = document.execCommand("copy");
+                        output.style.display = "none";
+                        if (!ok) throw new Error("failed");
+                        btnCopy.textContent = `Скопировано! (${sizeKb} KB)`;
+                    } catch {
+                        output.style.display = "none";
+                        status.textContent = "Ошибка копирования";
+                        status.className = "error";
+                        btnCopy.textContent = "Скопировать JSON";
+                        btnCopy.disabled = false;
+                        return;
+                    }
+                }
 
-    window.onmessage = (event) => {
-      const msg = event.data.pluginMessage;
-      if (!msg) return;
+                btnCopy.disabled = false;
+                setTimeout(() => {
+                    btnCopy.textContent = "Скопировать JSON";
+                }, 2000);
+            });
 
-      if (msg.type === "ERROR") {
-        status.textContent = msg.message;
-        status.className = "error";
-        setButtons(false);
-      }
+            window.onmessage = (event) => {
+                const msg = event.data.pluginMessage;
+                if (!msg) return;
 
-      if (msg.type === "RESULT") {
-        lightResult = msg.payload;
-        setButtons(false);
+                if (msg.type === "ERROR") {
+                    status.textContent = msg.message;
+                    status.className = "error";
+                    setButtons(false);
+                }
 
-        const colors = Array.isArray(lightResult) && lightResult[0]?.colors
-          ? lightResult[0].colors : [];
-        const images = Array.isArray(lightResult) && lightResult[1]?.images
-          ? lightResult[1].images : [];
-        const texts = Array.isArray(lightResult) && lightResult[2]?.texts
-          ? lightResult[2].texts : [];
-        const structure = Array.isArray(lightResult) && lightResult[3]?.structure
-          ? lightResult[3].structure : [];
-        const svgs = Array.isArray(lightResult) && lightResult[4]?.svgs
-          ? lightResult[4].svgs : [];
+                if (msg.type === "RESULT") {
+                    lightResult = msg.payload;
+                    setButtons(false);
 
-        cntColors.textContent = colors.length;
-        cntImages.textContent = images.length;
-        cntSvgs.textContent = svgs.length;
-        cntTexts.textContent = texts.length;
-        cntSections.textContent = structure.length;
-        statsEl.style.display = "grid";
+                    const colors =
+                        Array.isArray(lightResult) && lightResult[0]?.colors
+                            ? lightResult[0].colors
+                            : [];
+                    const images =
+                        Array.isArray(lightResult) && lightResult[1]?.images
+                            ? lightResult[1].images
+                            : [];
+                    const texts =
+                        Array.isArray(lightResult) && lightResult[2]?.texts
+                            ? lightResult[2].texts
+                            : [];
+                    const structure =
+                        Array.isArray(lightResult) && lightResult[3]?.structure
+                            ? lightResult[3].structure
+                            : [];
+                    const svgs =
+                        Array.isArray(lightResult) && lightResult[4]?.svgs
+                            ? lightResult[4].svgs
+                            : [];
+                    const fonts =
+                        Array.isArray(lightResult) && lightResult[5]?.fonts
+                            ? lightResult[5].fonts
+                            : []; // 🌟 Извлекаем шрифты
 
-        status.textContent = `Готово: ${colors.length} цветов, ${images.length} картинок, ${svgs.length} SVG, ${texts.length} текстов`;
-        status.className = "ok";
-        btnCopy.disabled = colors.length === 0 && images.length === 0 && texts.length === 0 && svgs.length === 0;
-      }
-    };
-  </script>
-</body>
+                    cntColors.textContent = colors.length;
+                    cntFonts.textContent = fonts.length; // 🌟
+                    cntImages.textContent = images.length;
+                    cntSvgs.textContent = svgs.length;
+                    cntTexts.textContent = texts.length;
+                    cntSections.textContent = structure.length;
+                    statsEl.style.display = "grid";
+
+                    status.textContent = `Готово: ${colors.length} цв., ${fonts.length} шр., ${images.length} карт., ${svgs.length} SVG, ${texts.length} текст.`;
+                    status.className = "ok";
+
+                    btnCopy.disabled =
+                        colors.length === 0 &&
+                        fonts.length === 0 &&
+                        images.length === 0 &&
+                        texts.length === 0 &&
+                        svgs.length === 0;
+                }
+            };
+        </script>
+    </body>
 </html>
