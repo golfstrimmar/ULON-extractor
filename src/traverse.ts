@@ -2,6 +2,7 @@ import { rgbToCss, rgbToHex } from "./lib/colors";
 import type {
   ColorItem,
   ExtractorResult,
+  FontItem,
   ImageItem,
   RgbColor,
   StructureNode,
@@ -31,12 +32,19 @@ function decodeUtf8(bytes: Uint8Array): string {
     } else if (c > 0xdf && c < 0xf0) {
       const c2 = bytes[i++];
       const c3 = bytes[i++];
-      out += String.fromCharCode(((c & 0x0f) << 12) | ((c2 & 0x3f) << 6) | (c3 & 0x3f));
+      out += String.fromCharCode(
+        ((c & 0x0f) << 12) | ((c2 & 0x3f) << 6) | (c3 & 0x3f),
+      );
     } else {
       const c2 = bytes[i++];
       const c3 = bytes[i++];
       const c4 = bytes[i++];
-      const u = (((c & 0x07) << 18) | ((c2 & 0x3f) << 12) | ((c3 & 0x3f) << 6) | (c4 & 0x3f)) - 0x10000;
+      const u =
+        (((c & 0x07) << 18) |
+          ((c2 & 0x3f) << 12) |
+          ((c3 & 0x3f) << 6) |
+          (c4 & 0x3f)) -
+        0x10000;
       out += String.fromCharCode(0xd800 + (u >> 10), 0xdc00 + (u & 0x3ff));
     }
   }
@@ -48,8 +56,10 @@ async function exportNodeAsDataUrl(node: SceneNode): Promise<string | null> {
     if (node.removed || !node.visible) return null;
     if (!("exportAsync" in node)) return null;
 
-    const width = "width" in node && typeof node.width === "number" ? node.width : 0;
-    const height = "height" in node && typeof node.height === "number" ? node.height : 0;
+    const width =
+      "width" in node && typeof node.width === "number" ? node.width : 0;
+    const height =
+      "height" in node && typeof node.height === "number" ? node.height : 0;
     if (width <= 0 || height <= 0) return null;
 
     const targetWidth = Math.min(Math.max(Math.round(width), 100), 600);
@@ -98,17 +108,30 @@ function extractFontWeight(fontStyle?: string): number {
   if (!fontStyle) return 400;
   const s = fontStyle.toLowerCase();
   if (s.includes("thin") || s.includes("hairline")) return 100;
-  if (s.includes("extralight") || s.includes("extra-light") || s.includes("ultra light")) return 200;
+  if (
+    s.includes("extralight") ||
+    s.includes("extra-light") ||
+    s.includes("ultra light")
+  )
+    return 200;
   if (s.includes("light")) return 300;
   if (s.includes("medium")) return 500;
-  if (s.includes("semibold") || s.includes("semi-bold") || s.includes("demi")) return 600;
+  if (s.includes("semibold") || s.includes("semi-bold") || s.includes("demi"))
+    return 600;
   if (s.includes("bold")) return 700;
-  if (s.includes("extrabold") || s.includes("extra-bold") || s.includes("ultrabold")) return 800;
+  if (
+    s.includes("extrabold") ||
+    s.includes("extra-bold") ||
+    s.includes("ultrabold")
+  )
+    return 800;
   if (s.includes("black") || s.includes("heavy")) return 900;
   return 400;
 }
 
-function extractSolidColor(paints: readonly Paint[] | PluginAPI["mixed"] | undefined): string | null {
+function extractSolidColor(
+  paints: readonly Paint[] | PluginAPI["mixed"] | undefined,
+): string | null {
   if (!paints || !Array.isArray(paints)) return null;
   for (const paint of paints) {
     if (paint.visible !== false && paint.type === "SOLID") {
@@ -153,7 +176,10 @@ function extractBoxShadow(node: SceneNode): string | null {
   return shadows.length > 0 ? shadows.join(", ") : null;
 }
 
-function extractBorder(node: SceneNode): { border?: string; borderRadius?: string } {
+function extractBorder(node: SceneNode): {
+  border?: string;
+  borderRadius?: string;
+} {
   const result: { border?: string; borderRadius?: string } = {};
 
   // 1. Извлечение скругления углов (border-radius)
@@ -161,10 +187,27 @@ function extractBorder(node: SceneNode): { border?: string; borderRadius?: strin
     if (typeof node.cornerRadius === "number" && node.cornerRadius > 0) {
       result.borderRadius = `${Math.round(node.cornerRadius)}px`;
     } else if (node.cornerRadius === figma.mixed) {
-      const tl = Math.round("topLeftRadius" in node && typeof node.topLeftRadius === "number" ? node.topLeftRadius : 0);
-      const tr = Math.round("topRightRadius" in node && typeof node.topRightRadius === "number" ? node.topRightRadius : 0);
-      const br = Math.round("bottomRightRadius" in node && typeof node.bottomRightRadius === "number" ? node.bottomRightRadius : 0);
-      const bl = Math.round("bottomLeftRadius" in node && typeof node.bottomLeftRadius === "number" ? node.bottomLeftRadius : 0);
+      const tl = Math.round(
+        "topLeftRadius" in node && typeof node.topLeftRadius === "number"
+          ? node.topLeftRadius
+          : 0,
+      );
+      const tr = Math.round(
+        "topRightRadius" in node && typeof node.topRightRadius === "number"
+          ? node.topRightRadius
+          : 0,
+      );
+      const br = Math.round(
+        "bottomRightRadius" in node &&
+          typeof node.bottomRightRadius === "number"
+          ? node.bottomRightRadius
+          : 0,
+      );
+      const bl = Math.round(
+        "bottomLeftRadius" in node && typeof node.bottomLeftRadius === "number"
+          ? node.bottomLeftRadius
+          : 0,
+      );
       if (tl > 0 || tr > 0 || br > 0 || bl > 0) {
         result.borderRadius = `${tl}px ${tr}px ${br}px ${bl}px`;
       }
@@ -172,13 +215,26 @@ function extractBorder(node: SceneNode): { border?: string; borderRadius?: strin
   }
 
   // 2. Извлечение рамки (border)
-  if ("strokes" in node && Array.isArray(node.strokes) && node.strokes.length > 0) {
-    const visibleStroke = node.strokes.find((s) => s.visible !== false && s.type === "SOLID");
+  if (
+    "strokes" in node &&
+    Array.isArray(node.strokes) &&
+    node.strokes.length > 0
+  ) {
+    const visibleStroke = node.strokes.find(
+      (s) => s.visible !== false && s.type === "SOLID",
+    );
     if (visibleStroke && visibleStroke.type === "SOLID") {
-      const strokeColor = rgbToHex(visibleStroke.color, visibleStroke.opacity ?? 1);
+      const strokeColor = rgbToHex(
+        visibleStroke.color,
+        visibleStroke.opacity ?? 1,
+      );
 
       let style = "solid";
-      if ("dashPattern" in node && Array.isArray(node.dashPattern) && node.dashPattern.length > 0) {
+      if (
+        "dashPattern" in node &&
+        Array.isArray(node.dashPattern) &&
+        node.dashPattern.length > 0
+      ) {
         style = node.dashPattern[0] <= 2 ? "dotted" : "dashed";
       }
 
@@ -197,10 +253,12 @@ function extractBorder(node: SceneNode): { border?: string; borderRadius?: strin
 }
 
 function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "box";
+  return (
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "box"
+  );
 }
 
 // ─── Распознавание SVG/Иконок ────────────────────────────────────────────────
@@ -227,8 +285,10 @@ function isSvgCandidate(node: SceneNode): boolean {
     node.type === "COMPONENT" ||
     node.type === "INSTANCE"
   ) {
-    const width = "width" in node && typeof node.width === "number" ? node.width : 0;
-    const height = "height" in node && typeof node.height === "number" ? node.height : 0;
+    const width =
+      "width" in node && typeof node.width === "number" ? node.width : 0;
+    const height =
+      "height" in node && typeof node.height === "number" ? node.height : 0;
 
     const isSmall = width > 0 && width <= 128 && height > 0 && height <= 128;
 
@@ -295,7 +355,7 @@ function collectPaints(
   paints: readonly Paint[] | PluginAPI["mixed"] | undefined,
   node: SceneNode,
   addColor: (color: RgbColor, opacity?: number) => void,
-  imageCandidates: ImageCandidate[]
+  imageCandidates: ImageCandidate[],
 ) {
   if (!paints || !Array.isArray(paints)) return;
 
@@ -313,8 +373,13 @@ function collectPaints(
       const gradientOpacity = paint.opacity ?? 1;
       for (const stop of paint.gradientStops) {
         addColor(
-          { r: stop.color.r, g: stop.color.g, b: stop.color.b, a: stop.color.a },
-          gradientOpacity
+          {
+            r: stop.color.r,
+            g: stop.color.g,
+            b: stop.color.b,
+            a: stop.color.a,
+          },
+          gradientOpacity,
         );
       }
     } else if (paint.type === "IMAGE" && paint.imageHash) {
@@ -334,9 +399,10 @@ function scanNode(
   currentSection: string,
   parentBgColor: string | null,
   addColor: (color: RgbColor, opacity?: number) => void,
+  addFont: (family: string, weight: number) => void, // 🌟 Передаем сборщик шрифтов
   imageCandidates: ImageCandidate[],
   svgCandidates: SceneNode[],
-  textItems: TextItem[]
+  textItems: TextItem[],
 ): StructureNode | null {
   if (node.visible === false) return null;
 
@@ -354,16 +420,31 @@ function scanNode(
         // fallback
       }
     } else {
-      collectPaints(node.fills as readonly Paint[], node, addColor, imageCandidates);
+      collectPaints(
+        node.fills as readonly Paint[],
+        node,
+        addColor,
+        imageCandidates,
+      );
     }
   }
 
   if ("strokes" in node) {
-    collectPaints(node.strokes as readonly Paint[], node, addColor, imageCandidates);
+    collectPaints(
+      node.strokes as readonly Paint[],
+      node,
+      addColor,
+      imageCandidates,
+    );
   }
 
   if ("backgrounds" in node) {
-    collectPaints(node.backgrounds as readonly Paint[], node, addColor, imageCandidates);
+    collectPaints(
+      node.backgrounds as readonly Paint[],
+      node,
+      addColor,
+      imageCandidates,
+    );
   }
 
   if ("effects" in node && Array.isArray(node.effects)) {
@@ -378,7 +459,6 @@ function scanNode(
   // 2. Проверка: является ли нода SVG-иконкой
   if (isSvgCandidate(node)) {
     svgCandidates.push(node);
-    // Для иконки добавляем ее цвета, но внутрь как дерево секций не углубляемся
     return null;
   }
 
@@ -389,12 +469,32 @@ function scanNode(
 
     let fontFamily = "Inter";
     let fontStyle = "Regular";
+
     if (node.fontName && node.fontName !== figma.mixed) {
       fontFamily = node.fontName.family;
       fontStyle = node.fontName.style;
+      const weight = extractFontWeight(fontStyle);
+      addFont(fontFamily, weight); // 🌟 Сохраняем шрифт и вес
+    } else if (node.fontName === figma.mixed) {
+      // 🌟 Если внутри текста разные шрифты/начертания
+      try {
+        const segments = node.getStyledTextSegments(["fontName"]);
+        for (const seg of segments) {
+          if (seg.fontName) {
+            addFont(seg.fontName.family, extractFontWeight(seg.fontName.style));
+          }
+        }
+        if (segments.length > 0 && segments[0].fontName) {
+          fontFamily = segments[0].fontName.family;
+          fontStyle = segments[0].fontName.style;
+        }
+      } catch {
+        addFont(fontFamily, 400);
+      }
     }
 
-    const fontSize = typeof node.fontSize === "number" ? Math.round(node.fontSize) : 16;
+    const fontSize =
+      typeof node.fontSize === "number" ? Math.round(node.fontSize) : 16;
     const fontWeight = extractFontWeight(fontStyle);
 
     let lineHeight: number | string = "normal";
@@ -421,10 +521,12 @@ function scanNode(
       RIGHT: "right",
       JUSTIFIED: "justify",
     };
-    const textAlign = node.textAlignHorizontal ? textAlignMap[node.textAlignHorizontal] || "left" : "left";
+    const textAlign = node.textAlignHorizontal
+      ? textAlignMap[node.textAlignHorizontal] || "left"
+      : "left";
 
     const textColor = extractSolidColor(
-      node.fills !== figma.mixed ? (node.fills as readonly Paint[]) : undefined
+      node.fills !== figma.mixed ? (node.fills as readonly Paint[]) : undefined,
     );
 
     const fontSlug = fontFamily.toLowerCase().replace(/[^a-z0-9]+/g, "-");
@@ -449,7 +551,8 @@ function scanNode(
     };
 
     if (borderInfo.border) textItem.border = borderInfo.border;
-    if (borderInfo.borderRadius) textItem.borderRadius = borderInfo.borderRadius;
+    if (borderInfo.borderRadius)
+      textItem.borderRadius = borderInfo.borderRadius;
 
     textItems.push(textItem);
 
@@ -471,7 +574,8 @@ function scanNode(
     node.type === "COMPONENT" ||
     node.type === "INSTANCE";
 
-  const nextSection = isSectionContainer && !currentSection ? node.name : currentSection;
+  const nextSection =
+    isSectionContainer && !currentSection ? node.name : currentSection;
 
   const childStructureNodes: StructureNode[] = [];
 
@@ -482,9 +586,10 @@ function scanNode(
         nextSection,
         nodeBgColor,
         addColor,
+        addFont, // 🌟 Передаем дальше
         imageCandidates,
         svgCandidates,
-        textItems
+        textItems,
       );
       if (childNode) {
         childStructureNodes.push(childNode);
@@ -492,7 +597,6 @@ function scanNode(
     }
   }
 
-  // Возвращаем структуру div только если внутри есть дети или это контейнер
   if (childStructureNodes.length > 0 || isSectionContainer) {
     const shadow = extractBoxShadow(node);
     const borderInfo = extractBorder(node);
@@ -525,7 +629,7 @@ function scanNode(
 // ─── Главная функция извлечения ─────────────────────────────────────────────
 
 export async function extractFromNodes(
-  roots: readonly SceneNode[]
+  roots: readonly SceneNode[],
 ): Promise<ExtractorResult> {
   const seenColors = new Set<string>();
   const colors: ColorItem[] = [];
@@ -533,6 +637,9 @@ export async function extractFromNodes(
   const rawSvgCandidates: SceneNode[] = [];
   const texts: TextItem[] = [];
   const structure: StructureNode[] = [];
+
+  // 🌟 Хранилище уникальных шрифтов: Family -> Set(weights)
+  const fontsMap = new Map<string, Set<number>>();
 
   const addColor = (color: RgbColor, opacity = 1) => {
     const hex = rgbToHex(color, opacity);
@@ -542,16 +649,26 @@ export async function extractFromNodes(
     }
   };
 
-  // 1. Обход дерева, сбор цветов, текстов, SVG-кандидатов и структуры
+  const addFont = (family: string, weight: number) => {
+    if (!family) return;
+    const cleanFamily = family.trim();
+    if (!fontsMap.has(cleanFamily)) {
+      fontsMap.set(cleanFamily, new Set<number>());
+    }
+    fontsMap.get(cleanFamily)!.add(weight);
+  };
+
+  // 1. Обход дерева, сбор цветов, текстов, шрифтов, SVG-кандидатов и структуры
   for (const root of roots) {
     const structNode = scanNode(
       root,
       "",
       null,
       addColor,
+      addFont,
       rawImageCandidates,
       rawSvgCandidates,
-      texts
+      texts,
     );
     if (structNode) {
       structure.push(structNode);
@@ -577,7 +694,9 @@ export async function extractFromNodes(
       name: c.node.name,
       imageHash: c.imageHash,
       width: Math.round("width" in c.node ? (c.node as LayoutMixin).width : 0),
-      height: Math.round("height" in c.node ? (c.node as LayoutMixin).height : 0),
+      height: Math.round(
+        "height" in c.node ? (c.node as LayoutMixin).height : 0,
+      ),
       scaleMode: c.scaleMode,
       data: dataUrl || "",
     });
@@ -597,10 +716,28 @@ export async function extractFromNodes(
         name: node.name,
         content: svgContent,
         width: Math.round("width" in node ? (node as LayoutMixin).width : 24),
-        height: Math.round("height" in node ? (node as LayoutMixin).height : 24),
+        height: Math.round(
+          "height" in node ? (node as LayoutMixin).height : 24,
+        ),
       });
     }
   }
 
-  return [{ colors }, { images }, { texts }, { structure }, { svgs }];
+  // 🌟 5. Формирование списка шрифтов с сортировкой начертаний
+  const fonts: FontItem[] = Array.from(fontsMap.entries()).map(
+    ([family, weightsSet]) => ({
+      family,
+      weights: Array.from(weightsSet).sort((a, b) => a - b),
+    }),
+  );
+
+  // 🌟 Возвращаем расширенный результат
+  return [
+    { colors },
+    { images },
+    { texts },
+    { structure },
+    { svgs },
+    { fonts },
+  ];
 }

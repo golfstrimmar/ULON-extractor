@@ -59,10 +59,16 @@ export interface SvgItem {
   height?: number;
 }
 
+export interface FontItem {
+  family: string;
+  weights: number[];
+}
+
 export type ExtractorResult = [
   { colors: ColorItem[] },
   { images: ImageItem[] },
   { texts: TextItem[] },
   { structure: StructureNode[] },
-  { svgs: SvgItem[] }
+  { svgs: SvgItem[] },
+  { fonts: FontItem[] }, // 🌟 Новый 6-й элемент
 ];
