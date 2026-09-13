@@ -394,60 +394,156 @@ function collectPaints(
 
 // ─── Определение секций и плоский сбор текстовых блоков ──────────────────────
 
+function unpackWrappers(node: SceneNode): SceneNode & ChildrenMixin {
+  let current: any = node;
+  while ("children" in current && Array.isArray(current.children)) {
+    const childContainers = current.children.filter(
+      (c: SceneNode) =>
+        !c.removed &&
+        c.visible !== false &&
+        "children" in c &&
+        !isSvgCandidate(c),
+    );
+
+    // Если внутри ровно 1 контейнер, и нет других самостоятельных текстов
+    if (childContainers.length === 1) {
+      const hasOtherTexts = current.children.some(
+        (c: SceneNode) =>
+          !c.removed &&
+          c.visible !== false &&
+          c !== childContainers[0] &&
+          c.type === "TEXT" &&
+          c.characters.trim().length > 0,
+      );
+      if (!hasOtherTexts) {
+        current = childContainers[0];
+        continue;
+      }
+    }
+    break;
+  }
+  return current;
+}
+
+function isArtboardContainer(node: SceneNode, isSingleSelection: boolean): boolean {
+  if (!("children" in node) || !Array.isArray((node as any).children)) {
+    return false;
+  }
+
+  if (isSvgCandidate(node)) return false;
+
+  const nameLower = node.name.toLowerCase().trim();
+  const isExplicitBlockName =
+    nameLower.includes("footer") ||
+    nameLower.includes("футер") ||
+    nameLower.includes("подвал") ||
+    nameLower.includes("header") ||
+    nameLower.includes("хедер") ||
+    nameLower.includes("шапка") ||
+    nameLower.includes("navbar") ||
+    nameLower.includes("навбар") ||
+    nameLower.includes("hero") ||
+    nameLower.includes("хиро") ||
+    nameLower.includes("первый экран") ||
+    nameLower.includes("banner") ||
+    nameLower.includes("баннер");
+
+  if (isExplicitBlockName) {
+    return false;
+  }
+
+  const container = unpackWrappers(node);
+  if (!("children" in container)) return false;
+
+  const childContainers = (container as any).children.filter(
+    (c: SceneNode) =>
+      !c.removed &&
+      c.visible !== false &&
+      "children" in c &&
+      !isSvgCandidate(c),
+  );
+
+  if (childContainers.length >= 2) {
+    if (isSingleSelection) return true;
+    if (node.parent?.type === "PAGE") return true;
+
+    const height = "height" in node && typeof node.height === "number" ? node.height : 0;
+    if (height >= 700) return true;
+
+    const isArtboardName =
+      nameLower.includes("desktop") ||
+      nameLower.includes("десктоп") ||
+      nameLower.includes("mobile") ||
+      nameLower.includes("мобайл") ||
+      nameLower.includes("tablet") ||
+      nameLower.includes("landing") ||
+      nameLower.includes("page") ||
+      nameLower.includes("страниц") ||
+      nameLower.includes("screen") ||
+      nameLower.includes("экран") ||
+      nameLower.includes("artboard") ||
+      nameLower.includes("main") ||
+      nameLower.includes("home") ||
+      /^frame\s*\d+$/i.test(nameLower);
+
+    if (isArtboardName) return true;
+  }
+
+  return false;
+}
+
 function getSectionNodes(
   roots: readonly SceneNode[],
   addColor: (color: RgbColor, opacity?: number) => void,
   imageCandidates: ImageCandidate[],
 ): SceneNode[] {
   const sections: SceneNode[] = [];
+  const isSingle = roots.length === 1;
 
   for (const root of roots) {
     if (root.removed || root.visible === false) continue;
 
-    // Проверяем: является ли этот root артбордом/контейнером нескольких секций
-    if (
-      root.type === "FRAME" &&
-      "children" in root &&
-      (root.parent?.type === "PAGE" || roots.length === 1)
-    ) {
-      const childFrames = root.children.filter(
-        (c) =>
-          !c.removed &&
-          c.visible !== false &&
-          (c.type === "FRAME" || c.type === "SECTION") &&
-          "height" in c &&
-          typeof c.height === "number" &&
-          c.height > 60,
-      );
+    // Проверяем: является ли этот root артбордом/экраном, содержащим блоки
+    if (isArtboardContainer(root, isSingle)) {
+      if ("fills" in root) {
+        collectPaints(
+          root.fills as readonly Paint[],
+          root,
+          addColor,
+          imageCandidates,
+        );
+      }
+      if ("strokes" in root) {
+        collectPaints(
+          root.strokes as readonly Paint[],
+          root,
+          addColor,
+          imageCandidates,
+        );
+      }
+      if ("backgrounds" in root) {
+        collectPaints(
+          root.backgrounds as readonly Paint[],
+          root,
+          addColor,
+          imageCandidates,
+        );
+      }
 
-      // Если внутри есть 2 или более полноценных фрейма/секции, считаем их секциями
-      if (childFrames.length >= 2) {
-        if ("fills" in root) {
-          collectPaints(
-            root.fills as readonly Paint[],
-            root,
-            addColor,
-            imageCandidates,
-          );
+      const container = unpackWrappers(root);
+      if ("children" in container) {
+        const childBlocks = (container as any).children.filter(
+          (c: SceneNode) =>
+            !c.removed &&
+            c.visible !== false &&
+            "children" in c &&
+            !isSvgCandidate(c),
+        );
+
+        if (childBlocks.length > 0) {
+          sections.push(...childBlocks);
+          continue;
         }
-        if ("strokes" in root) {
-          collectPaints(
-            root.strokes as readonly Paint[],
-            root,
-            addColor,
-            imageCandidates,
-          );
-        }
-        if ("backgrounds" in root) {
-          collectPaints(
-            root.backgrounds as readonly Paint[],
-            root,
-            addColor,
-            imageCandidates,
-          );
-        }
-        sections.push(...childFrames);
-        continue;
       }
     }
 
