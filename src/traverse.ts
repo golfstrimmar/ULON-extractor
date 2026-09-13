@@ -7,6 +7,7 @@ import type {
   RgbColor,
   StructureNode,
   SvgItem,
+  TextBlockItem,
   TextItem,
 } from "./lib/types";
 
@@ -67,7 +68,6 @@ async function exportNodeAsDataUrl(node: SceneNode): Promise<string | null> {
     const bytes = await node.exportAsync({
       format: "JPG",
       constraint: { type: "WIDTH", value: targetWidth },
-      quality: 0.85,
     });
 
     if (!bytes || bytes.length === 0) return null;
@@ -392,63 +392,114 @@ function collectPaints(
   }
 }
 
-// ─── Рекурсивный обход нод ──────────────────────────────────────────────────
+// ─── Определение секций и плоский сбор текстовых блоков ──────────────────────
 
-function scanNode(
-  node: SceneNode,
-  currentSection: string,
-  parentBgColor: string | null,
+function getSectionNodes(
+  roots: readonly SceneNode[],
   addColor: (color: RgbColor, opacity?: number) => void,
-  addFont: (family: string, weight: number) => void, // 🌟 Передаем сборщик шрифтов
+  imageCandidates: ImageCandidate[],
+): SceneNode[] {
+  const sections: SceneNode[] = [];
+
+  for (const root of roots) {
+    if (root.removed || root.visible === false) continue;
+
+    // Проверяем: является ли этот root артбордом/контейнером нескольких секций
+    if (
+      root.type === "FRAME" &&
+      "children" in root &&
+      (root.parent?.type === "PAGE" || roots.length === 1)
+    ) {
+      const childFrames = root.children.filter(
+        (c) =>
+          !c.removed &&
+          c.visible !== false &&
+          (c.type === "FRAME" || c.type === "SECTION") &&
+          "height" in c &&
+          typeof c.height === "number" &&
+          c.height > 60,
+      );
+
+      // Если внутри есть 2 или более полноценных фрейма/секции, считаем их секциями
+      if (childFrames.length >= 2) {
+        if ("fills" in root) {
+          collectPaints(
+            root.fills as readonly Paint[],
+            root,
+            addColor,
+            imageCandidates,
+          );
+        }
+        if ("strokes" in root) {
+          collectPaints(
+            root.strokes as readonly Paint[],
+            root,
+            addColor,
+            imageCandidates,
+          );
+        }
+        if ("backgrounds" in root) {
+          collectPaints(
+            root.backgrounds as readonly Paint[],
+            root,
+            addColor,
+            imageCandidates,
+          );
+        }
+        sections.push(...childFrames);
+        continue;
+      }
+    }
+
+    sections.push(root);
+  }
+
+  return sections;
+}
+
+function extractSection(
+  sectionNode: SceneNode,
+  addColor: (color: RgbColor, opacity?: number) => void,
+  addFont: (family: string, weight: number) => void,
   imageCandidates: ImageCandidate[],
   svgCandidates: SceneNode[],
   textItems: TextItem[],
 ): StructureNode | null {
-  if (node.visible === false) return null;
+  if (sectionNode.removed || sectionNode.visible === false) return null;
 
-  const nodeBgColor = extractBackgroundColor(node) || parentBgColor;
+  const sectionBgColor = extractBackgroundColor(sectionNode);
+  const shadow = extractBoxShadow(sectionNode);
+  const borderInfo = extractBorder(sectionNode);
 
-  // 1. Сбор цветов из заливок, обводок, фонов, теней
-  if ("fills" in node) {
-    if (node.fills === figma.mixed && node.type === "TEXT") {
-      try {
-        const segments = node.getStyledTextSegments(["fills"]);
-        for (const seg of segments) {
-          collectPaints(seg.fills, node, addColor, imageCandidates);
-        }
-      } catch {
-        // fallback
-      }
-    } else {
-      collectPaints(
-        node.fills as readonly Paint[],
-        node,
-        addColor,
-        imageCandidates,
-      );
-    }
-  }
+  const textBlocks: TextBlockItem[] = [];
 
-  if ("strokes" in node) {
+  // Сбор стилей и заливок самой секции
+  if ("fills" in sectionNode) {
     collectPaints(
-      node.strokes as readonly Paint[],
-      node,
+      sectionNode.fills as readonly Paint[],
+      sectionNode,
       addColor,
       imageCandidates,
     );
   }
-
-  if ("backgrounds" in node) {
+  if ("strokes" in sectionNode) {
     collectPaints(
-      node.backgrounds as readonly Paint[],
-      node,
+      sectionNode.strokes as readonly Paint[],
+      sectionNode,
       addColor,
       imageCandidates,
     );
   }
-
-  if ("effects" in node && Array.isArray(node.effects)) {
-    for (const effect of node.effects) {
+  if ("backgrounds" in sectionNode) {
+    collectPaints(
+      sectionNode.backgrounds as readonly Paint[],
+      sectionNode,
+      addColor,
+      imageCandidates,
+    );
+  }
+  if ("effects" in sectionNode && Array.isArray(sectionNode.effects)) {
+    for (const effect of sectionNode.effects) {
       if (effect.visible === false) continue;
       if (effect.type === "DROP_SHADOW" || effect.type === "INNER_SHADOW") {
         addColor(effect.color, effect.color.a ?? 1);
@@ -456,174 +507,216 @@ function scanNode(
     }
   }
 
-  // 2. Проверка: является ли нода SVG-иконкой
-  if (isSvgCandidate(node)) {
-    svgCandidates.push(node);
-    return null;
-  }
+  function walk(node: SceneNode, parentBg: string | null) {
+    if (node.removed || node.visible === false) return;
 
-  // 3. Обработка текстовой ноды
-  if (node.type === "TEXT") {
-    const rawText = node.characters.trim();
-    if (!rawText) return null;
+    const nodeBgColor = extractBackgroundColor(node) || parentBg;
 
-    let fontFamily = "Inter";
-    let fontStyle = "Regular";
-
-    if (node.fontName && node.fontName !== figma.mixed) {
-      fontFamily = node.fontName.family;
-      fontStyle = node.fontName.style;
-      const weight = extractFontWeight(fontStyle);
-      addFont(fontFamily, weight); // 🌟 Сохраняем шрифт и вес
-    } else if (node.fontName === figma.mixed) {
-      // 🌟 Если внутри текста разные шрифты/начертания
-      try {
-        const segments = node.getStyledTextSegments(["fontName"]);
-        for (const seg of segments) {
-          if (seg.fontName) {
-            addFont(seg.fontName.family, extractFontWeight(seg.fontName.style));
+    // 1. Сбор цветов из заливок, обводок, фонов, теней
+    if ("fills" in node) {
+      if (node.fills === figma.mixed && node.type === "TEXT") {
+        try {
+          const segments = node.getStyledTextSegments(["fills"]);
+          for (const seg of segments) {
+            collectPaints(seg.fills, node, addColor, imageCandidates);
           }
+        } catch {
+          // fallback
         }
-        if (segments.length > 0 && segments[0].fontName) {
-          fontFamily = segments[0].fontName.family;
-          fontStyle = segments[0].fontName.style;
-        }
-      } catch {
-        addFont(fontFamily, 400);
+      } else {
+        collectPaints(
+          node.fills as readonly Paint[],
+          node,
+          addColor,
+          imageCandidates,
+        );
       }
     }
 
-    const fontSize =
-      typeof node.fontSize === "number" ? Math.round(node.fontSize) : 16;
-    const fontWeight = extractFontWeight(fontStyle);
-
-    let lineHeight: number | string = "normal";
-    if (node.lineHeight && node.lineHeight !== figma.mixed) {
-      if (node.lineHeight.unit === "PIXELS") {
-        lineHeight = Math.round(node.lineHeight.value);
-      } else if (node.lineHeight.unit === "PERCENT") {
-        lineHeight = `${Math.round(node.lineHeight.value)}%`;
-      }
-    }
-
-    let letterSpacing: number | string = 0;
-    if (node.letterSpacing && node.letterSpacing !== figma.mixed) {
-      if (node.letterSpacing.unit === "PIXELS") {
-        letterSpacing = parseFloat(node.letterSpacing.value.toFixed(2));
-      } else if (node.letterSpacing.unit === "PERCENT") {
-        letterSpacing = `${parseFloat(node.letterSpacing.value.toFixed(2))}%`;
-      }
-    }
-
-    const textAlignMap: Record<string, string> = {
-      LEFT: "left",
-      CENTER: "center",
-      RIGHT: "right",
-      JUSTIFIED: "justify",
-    };
-    const textAlign = node.textAlignHorizontal
-      ? textAlignMap[node.textAlignHorizontal] || "left"
-      : "left";
-
-    const textColor = extractSolidColor(
-      node.fills !== figma.mixed ? (node.fills as readonly Paint[]) : undefined,
-    );
-
-    const fontSlug = fontFamily.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    const className = `font-${fontSlug}-${fontWeight}-${fontSize}`;
-
-    const borderInfo = extractBorder(node);
-
-    const textItem: TextItem = {
-      id: node.id,
-      tag: "p",
-      text: rawText,
-      fontFamily,
-      fontSize,
-      fontWeight,
-      lineHeight,
-      letterSpacing,
-      textAlign,
-      color: textColor,
-      backgroundColor: nodeBgColor,
-      className,
-      section: currentSection || node.name,
-    };
-
-    if (borderInfo.border) textItem.border = borderInfo.border;
-    if (borderInfo.borderRadius)
-      textItem.borderRadius = borderInfo.borderRadius;
-
-    textItems.push(textItem);
-
-    return {
-      id: node.id,
-      name: node.name,
-      tag: "p",
-      className,
-      text: rawText,
-      children: [],
-    };
-  }
-
-  // 4. Обработка контейнеров/оберток (Frame, Group, Section, Component)
-  const isSectionContainer =
-    node.type === "FRAME" ||
-    node.type === "SECTION" ||
-    node.type === "GROUP" ||
-    node.type === "COMPONENT" ||
-    node.type === "INSTANCE";
-
-  const nextSection =
-    isSectionContainer && !currentSection ? node.name : currentSection;
-
-  const childStructureNodes: StructureNode[] = [];
-
-  if ("children" in node) {
-    for (const child of node.children) {
-      const childNode = scanNode(
-        child,
-        nextSection,
-        nodeBgColor,
+    if ("strokes" in node) {
+      collectPaints(
+        node.strokes as readonly Paint[],
+        node,
         addColor,
-        addFont, // 🌟 Передаем дальше
         imageCandidates,
-        svgCandidates,
-        textItems,
       );
-      if (childNode) {
-        childStructureNodes.push(childNode);
+    }
+
+    if ("backgrounds" in node) {
+      collectPaints(
+        node.backgrounds as readonly Paint[],
+        node,
+        addColor,
+        imageCandidates,
+      );
+    }
+
+    if ("effects" in node && Array.isArray(node.effects)) {
+      for (const effect of node.effects) {
+        if (effect.visible === false) continue;
+        if (effect.type === "DROP_SHADOW" || effect.type === "INNER_SHADOW") {
+          addColor(effect.color, effect.color.a ?? 1);
+        }
+      }
+    }
+
+    // 2. Проверка: является ли нода SVG-иконкой
+    if (isSvgCandidate(node)) {
+      svgCandidates.push(node);
+      return;
+    }
+
+    // 3. Обработка текстовой ноды
+    if (node.type === "TEXT") {
+      const rawText = node.characters.trim();
+      if (!rawText) return;
+
+      let fontFamily = "Inter";
+      let fontStyle = "Regular";
+
+      if (node.fontName && node.fontName !== figma.mixed) {
+        fontFamily = node.fontName.family;
+        fontStyle = node.fontName.style;
+        const weight = extractFontWeight(fontStyle);
+        addFont(fontFamily, weight);
+      } else if (node.fontName === figma.mixed) {
+        try {
+          const segments = node.getStyledTextSegments(["fontName"]);
+          for (const seg of segments) {
+            if (seg.fontName) {
+              addFont(seg.fontName.family, extractFontWeight(seg.fontName.style));
+            }
+          }
+          if (segments.length > 0 && segments[0].fontName) {
+            fontFamily = segments[0].fontName.family;
+            fontStyle = segments[0].fontName.style;
+          }
+        } catch {
+          addFont(fontFamily, 400);
+        }
+      }
+
+      const fontSize =
+        typeof node.fontSize === "number" ? Math.round(node.fontSize) : 16;
+      const fontWeight = extractFontWeight(fontStyle);
+
+      let lineHeight: number | string = "normal";
+      if (node.lineHeight && node.lineHeight !== figma.mixed) {
+        if (node.lineHeight.unit === "PIXELS") {
+          lineHeight = Math.round(node.lineHeight.value);
+        } else if (node.lineHeight.unit === "PERCENT") {
+          lineHeight = `${Math.round(node.lineHeight.value)}%`;
+        }
+      }
+
+      let letterSpacing: number | string = 0;
+      if (node.letterSpacing && node.letterSpacing !== figma.mixed) {
+        if (node.letterSpacing.unit === "PIXELS") {
+          letterSpacing = parseFloat(node.letterSpacing.value.toFixed(2));
+        } else if (node.letterSpacing.unit === "PERCENT") {
+          letterSpacing = `${parseFloat(node.letterSpacing.value.toFixed(2))}%`;
+        }
+      }
+
+      const textAlignMap: Record<string, string> = {
+        LEFT: "left",
+        CENTER: "center",
+        RIGHT: "right",
+        JUSTIFIED: "justify",
+      };
+      const textAlign = node.textAlignHorizontal
+        ? textAlignMap[node.textAlignHorizontal] || "left"
+        : "left";
+
+      const textColor = extractSolidColor(
+        node.fills !== figma.mixed ? (node.fills as readonly Paint[]) : undefined,
+      );
+
+      const fontSlug = fontFamily.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      const className = `font-${fontSlug}-${fontWeight}-${fontSize}`;
+      const textBorderInfo = extractBorder(node);
+
+      // Глобальный TextItem
+      const textItem: TextItem = {
+        id: node.id,
+        tag: "p",
+        text: rawText,
+        fontFamily,
+        fontSize,
+        fontWeight,
+        lineHeight,
+        letterSpacing,
+        textAlign,
+        color: textColor,
+        backgroundColor: nodeBgColor,
+        className,
+        section: sectionNode.name,
+      };
+      if (textBorderInfo.border) textItem.border = textBorderInfo.border;
+      if (textBorderInfo.borderRadius)
+        textItem.borderRadius = textBorderInfo.borderRadius;
+      textItems.push(textItem);
+
+      // Плоский текстовый блок для структуры секции (без промежуточной вложенности)
+      const textBlock: TextBlockItem = {
+        id: node.id,
+        name: node.name,
+        tag: "p",
+        text: rawText,
+        fontFamily,
+        fontSize,
+        fontWeight,
+        lineHeight,
+        letterSpacing,
+        textAlign,
+        color: textColor,
+        backgroundColor: nodeBgColor,
+        className,
+      };
+      if (textBorderInfo.border) textBlock.border = textBorderInfo.border;
+      if (textBorderInfo.borderRadius)
+        textBlock.borderRadius = textBorderInfo.borderRadius;
+      textBlocks.push(textBlock);
+
+      return;
+    }
+
+    // 4. Рекурсивный обход детей контейнера
+    if ("children" in node) {
+      for (const child of node.children) {
+        walk(child, nodeBgColor);
       }
     }
   }
 
-  if (childStructureNodes.length > 0 || isSectionContainer) {
-    const shadow = extractBoxShadow(node);
-    const borderInfo = extractBorder(node);
-
-    const structNode: StructureNode = {
-      id: node.id,
-      name: node.name,
-      tag: "div",
-      className: `section-${slugify(node.name)}`,
-      backgroundColor: nodeBgColor,
-      children: childStructureNodes,
-    };
-
-    if (shadow) {
-      structNode.boxShadow = shadow;
+  if ("children" in sectionNode) {
+    for (const child of sectionNode.children) {
+      walk(child, sectionBgColor);
     }
-    if (borderInfo.border) {
-      structNode.border = borderInfo.border;
-    }
-    if (borderInfo.borderRadius) {
-      structNode.borderRadius = borderInfo.borderRadius;
-    }
-
-    return structNode;
+  } else if (sectionNode.type === "TEXT") {
+    walk(sectionNode, sectionBgColor);
   }
 
-  return null;
+  const structNode: StructureNode = {
+    id: sectionNode.id,
+    name: sectionNode.name,
+    tag: "div",
+    className: `section-${slugify(sectionNode.name)}`,
+    backgroundColor: sectionBgColor,
+    children: textBlocks,
+  };
+
+  if (shadow) {
+    structNode.boxShadow = shadow;
+  }
+  if (borderInfo.border) {
+    structNode.border = borderInfo.border;
+  }
+  if (borderInfo.borderRadius) {
+    structNode.borderRadius = borderInfo.borderRadius;
+  }
+
+  return structNode;
 }
 
 // ─── Главная функция извлечения ─────────────────────────────────────────────
@@ -658,12 +751,12 @@ export async function extractFromNodes(
     fontsMap.get(cleanFamily)!.add(weight);
   };
 
-  // 1. Обход дерева, сбор цветов, текстов, шрифтов, SVG-кандидатов и структуры
-  for (const root of roots) {
-    const structNode = scanNode(
-      root,
-      "",
-      null,
+  // 1. Определение секций и сбор структуры с плоскими текстовыми блоками
+  const sectionNodes = getSectionNodes(roots, addColor, rawImageCandidates);
+
+  for (const sectionNode of sectionNodes) {
+    const structNode = extractSection(
+      sectionNode,
       addColor,
       addFont,
       rawImageCandidates,

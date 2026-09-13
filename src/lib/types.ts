@@ -10,6 +10,15 @@ export interface ColorItem {
   original: string;
 }
 
+export interface ColorInfo {
+  hex: string;
+  rgb: string;
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+}
+
 export interface ImageItem {
   id: string; // nodeId
   name: string;
@@ -38,17 +47,34 @@ export interface TextItem {
   section: string;
 }
 
+export interface TextBlockItem {
+  id: string;
+  name: string;
+  tag: "p";
+  text: string;
+  fontFamily: string;
+  fontSize: number;
+  fontWeight: number;
+  lineHeight: number | string;
+  letterSpacing: number | string;
+  textAlign: string;
+  color: string | null;
+  backgroundColor: string | null;
+  border?: string;
+  borderRadius?: string;
+  className: string;
+}
+
 export interface StructureNode {
   id: string;
   name: string;
-  tag: "div" | "p";
+  tag: "div";
   className?: string;
   backgroundColor?: string | null;
   boxShadow?: string;
   border?: string;
   borderRadius?: string;
-  text?: string;
-  children: StructureNode[];
+  children: TextBlockItem[];
 }
 
 export interface SvgItem {
