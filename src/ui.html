@@ -274,61 +274,69 @@
             });
 
             window.onmessage = (event) => {
-                const msg = event.data.pluginMessage;
-                if (!msg) return;
+                try {
+                    const msg = event.data.pluginMessage;
+                    if (!msg) return;
 
-                if (msg.type === "ERROR") {
-                    status.textContent = msg.message;
+                    if (msg.type === "ERROR") {
+                        status.textContent = msg.message;
+                        status.className = "error";
+                        setButtons(false);
+                        return;
+                    }
+
+                    if (msg.type === "RESULT") {
+                        lightResult = msg.payload;
+                        setButtons(false);
+
+                        const colors =
+                            Array.isArray(lightResult) && lightResult[0]?.colors
+                                ? lightResult[0].colors
+                                : [];
+                        const images =
+                            Array.isArray(lightResult) && lightResult[1]?.images
+                                ? lightResult[1].images
+                                : [];
+                        const texts =
+                            Array.isArray(lightResult) && lightResult[2]?.texts
+                                ? lightResult[2].texts
+                                : [];
+                        const structure =
+                            Array.isArray(lightResult) && lightResult[3]?.structure
+                                ? lightResult[3].structure
+                                : [];
+                        const svgs =
+                            Array.isArray(lightResult) && lightResult[4]?.svgs
+                                ? lightResult[4].svgs
+                                : [];
+                        const fonts =
+                            Array.isArray(lightResult) && lightResult[5]?.fonts
+                                ? lightResult[5].fonts
+                                : [];
+
+                        cntColors.textContent = colors.length;
+                        cntFonts.textContent = fonts.length;
+                        cntImages.textContent = images.length;
+                        cntSvgs.textContent = svgs.length;
+                        cntTexts.textContent = texts.length;
+                        cntSections.textContent = structure.length;
+                        statsEl.style.display = "grid";
+
+                        status.textContent = `Готово: ${colors.length} цв., ${fonts.length} шр., ${images.length} карт., ${svgs.length} SVG, ${texts.length} текст.`;
+                        status.className = "ok";
+
+                        btnCopy.disabled =
+                            colors.length === 0 &&
+                            fonts.length === 0 &&
+                            images.length === 0 &&
+                            texts.length === 0 &&
+                            svgs.length === 0;
+                    }
+                } catch (e) {
+                    console.error("UI error:", e);
+                    status.textContent = "Ошибка: " + (e.message || String(e));
                     status.className = "error";
                     setButtons(false);
-                }
-
-                if (msg.type === "RESULT") {
-                    lightResult = msg.payload;
-                    setButtons(false);
-
-                    const colors =
-                        Array.isArray(lightResult) && lightResult[0]?.colors
-                            ? lightResult[0].colors
-                            : [];
-                    const images =
-                        Array.isArray(lightResult) && lightResult[1]?.images
-                            ? lightResult[1].images
-                            : [];
-                    const texts =
-                        Array.isArray(lightResult) && lightResult[2]?.texts
-                            ? lightResult[2].texts
-                            : [];
-                    const structure =
-                        Array.isArray(lightResult) && lightResult[3]?.structure
-                            ? lightResult[3].structure
-                            : [];
-                    const svgs =
-                        Array.isArray(lightResult) && lightResult[4]?.svgs
-                            ? lightResult[4].svgs
-                            : [];
-                    const fonts =
-                        Array.isArray(lightResult) && lightResult[5]?.fonts
-                            ? lightResult[5].fonts
-                            : []; // 🌟 Извлекаем шрифты
-
-                    cntColors.textContent = colors.length;
-                    cntFonts.textContent = fonts.length; // 🌟
-                    cntImages.textContent = images.length;
-                    cntSvgs.textContent = svgs.length;
-                    cntTexts.textContent = texts.length;
-                    cntSections.textContent = structure.length;
-                    statsEl.style.display = "grid";
-
-                    status.textContent = `Готово: ${colors.length} цв., ${fonts.length} шр., ${images.length} карт., ${svgs.length} SVG, ${texts.length} текст.`;
-                    status.className = "ok";
-
-                    btnCopy.disabled =
-                        colors.length === 0 &&
-                        fonts.length === 0 &&
-                        images.length === 0 &&
-                        texts.length === 0 &&
-                        svgs.length === 0;
                 }
             };
         </script>

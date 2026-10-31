@@ -52,6 +52,13 @@ function decodeUtf8(bytes: Uint8Array): string {
   return out;
 }
 
+function withTimeout<T>(promise: Promise<T>, ms = 3000): Promise<T | null> {
+  return Promise.race([
+    promise,
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
+  ]);
+}
+
 async function exportNodeAsDataUrl(node: SceneNode): Promise<string | null> {
   try {
     if (node.removed || !node.visible) return null;
@@ -65,11 +72,12 @@ async function exportNodeAsDataUrl(node: SceneNode): Promise<string | null> {
 
     const targetWidth = Math.min(Math.max(Math.round(width), 100), 600);
 
-    const bytes = await node.exportAsync({
+    const exportPromise = node.exportAsync({
       format: "JPG",
       constraint: { type: "WIDTH", value: targetWidth },
     });
 
+    const bytes = await withTimeout(exportPromise, 4000);
     if (!bytes || bytes.length === 0) return null;
 
     const base64 = figma.base64Encode(bytes);
@@ -85,12 +93,13 @@ async function exportNodeAsSvg(node: SceneNode): Promise<string | null> {
     if (node.removed || !node.visible) return null;
     if (!("exportAsync" in node)) return null;
 
-    const bytes = await node.exportAsync({
+    const exportPromise = node.exportAsync({
       format: "SVG",
       svgOutlineText: true,
       svgIdAttribute: false,
     });
 
+    const bytes = await withTimeout(exportPromise, 3000);
     if (!bytes || bytes.length === 0) return null;
 
     let svgStr = decodeUtf8(bytes);
@@ -302,11 +311,16 @@ function isSvgCandidate(node: SceneNode): boolean {
       nameLower.includes("vector") ||
       nameLower.includes("glyph");
 
+    // Быстрый выход: если узел не маленький и нет имени иконки — это точно не иконка!
+    if (!isSmall && !hasIconName) return false;
+
     let hasVectors = false;
     let hasImages = false;
     let hasLongText = false;
+    let visitedCount = 0;
 
     function checkChild(child: SceneNode) {
+      if (++visitedCount > 30) return;
       if (
         child.type === "VECTOR" ||
         child.type === "BOOLEAN_OPERATION" ||
@@ -394,128 +408,45 @@ function collectPaints(
 
 // ─── Определение секций и плоский сбор текстовых блоков ──────────────────────
 
-function unpackWrappers(node: SceneNode): SceneNode & ChildrenMixin {
-  let current: any = node;
-  while ("children" in current && Array.isArray(current.children)) {
-    const childContainers = current.children.filter(
-      (c: SceneNode) =>
-        !c.removed &&
-        c.visible !== false &&
-        "children" in c &&
-        !isSvgCandidate(c),
-    );
-
-    // Если внутри ровно 1 контейнер, и нет других самостоятельных текстов
-    if (childContainers.length === 1) {
-      const hasOtherTexts = current.children.some(
-        (c: SceneNode) =>
-          !c.removed &&
-          c.visible !== false &&
-          c !== childContainers[0] &&
-          c.type === "TEXT" &&
-          c.characters.trim().length > 0,
-      );
-      if (!hasOtherTexts) {
-        current = childContainers[0];
-        continue;
-      }
-    }
-    break;
-  }
-  return current;
-}
-
-function isArtboardContainer(node: SceneNode, isSingleSelection: boolean): boolean {
-  if (!("children" in node) || !Array.isArray((node as any).children)) {
-    return false;
-  }
-
-  if (isSvgCandidate(node)) return false;
-
-  const nameLower = node.name.toLowerCase().trim();
-  const isExplicitBlockName =
-    nameLower.includes("footer") ||
-    nameLower.includes("футер") ||
-    nameLower.includes("подвал") ||
-    nameLower.includes("header") ||
-    nameLower.includes("хедер") ||
-    nameLower.includes("шапка") ||
-    nameLower.includes("navbar") ||
-    nameLower.includes("навбар") ||
-    nameLower.includes("hero") ||
-    nameLower.includes("хиро") ||
-    nameLower.includes("первый экран") ||
-    nameLower.includes("banner") ||
-    nameLower.includes("баннер");
-
-  if (isExplicitBlockName) {
-    return false;
-  }
-
-  const container = unpackWrappers(node);
-  if (!("children" in container)) return false;
-
-  const childContainers = (container as any).children.filter(
-    (c: SceneNode) =>
-      !c.removed &&
-      c.visible !== false &&
-      "children" in c &&
-      !isSvgCandidate(c),
-  );
-
-  if (childContainers.length >= 2) {
-    if (isSingleSelection) return true;
-    if (node.parent?.type === "PAGE") return true;
-
-    const height = "height" in node && typeof node.height === "number" ? node.height : 0;
-    if (height >= 700) return true;
-
-    const isArtboardName =
-      nameLower.includes("desktop") ||
-      nameLower.includes("десктоп") ||
-      nameLower.includes("mobile") ||
-      nameLower.includes("мобайл") ||
-      nameLower.includes("tablet") ||
-      nameLower.includes("landing") ||
-      nameLower.includes("page") ||
-      nameLower.includes("страниц") ||
-      nameLower.includes("screen") ||
-      nameLower.includes("экран") ||
-      nameLower.includes("artboard") ||
-      nameLower.includes("main") ||
-      nameLower.includes("home") ||
-      /^frame\s*\d+$/i.test(nameLower);
-
-    if (isArtboardName) return true;
-  }
-
-  return false;
-}
-
 function getSectionNodes(
   roots: readonly SceneNode[],
   addColor: (color: RgbColor, opacity?: number) => void,
   imageCandidates: ImageCandidate[],
 ): SceneNode[] {
   const sections: SceneNode[] = [];
-  const isSingle = roots.length === 1;
 
   for (const root of roots) {
     if (root.removed || root.visible === false) continue;
 
-    // Проверяем: является ли этот root артбордом/экраном, содержащим блоки
-    if (isArtboardContainer(root, isSingle)) {
+    const nameLower = root.name.toLowerCase().trim();
+    const isExplicitBlock =
+      nameLower.includes("footer") ||
+      nameLower.includes("футер") ||
+      nameLower.includes("подвал") ||
+      nameLower.includes("header") ||
+      nameLower.includes("хедер") ||
+      nameLower.includes("шапка") ||
+      nameLower.includes("navbar") ||
+      nameLower.includes("навбар") ||
+      nameLower.includes("hero") ||
+      nameLower.includes("хиро") ||
+      nameLower.includes("banner") ||
+      nameLower.includes("баннер");
+
+    const height =
+      "height" in root && typeof root.height === "number" ? root.height : 0;
+
+    // 1. Если это одиночный блок (например, выделен Footer, Header или один небольшой фрейм)
+    if (isExplicitBlock || (roots.length === 1 && height > 0 && height < 500)) {
+      sections.push(root);
+      continue;
+    }
+
+    // 2. Если узел содержит дочерние элементы (артборд / экран / фрейм страницы)
+    if ("children" in root && Array.isArray((root as any).children)) {
       if ("fills" in root) {
         collectPaints(
           root.fills as readonly Paint[],
-          root,
-          addColor,
-          imageCandidates,
-        );
-      }
-      if ("strokes" in root) {
-        collectPaints(
-          root.strokes as readonly Paint[],
           root,
           addColor,
           imageCandidates,
@@ -530,17 +461,41 @@ function getSectionNodes(
         );
       }
 
-      const container = unpackWrappers(root);
-      if ("children" in container) {
-        const childBlocks = (container as any).children.filter(
-          (c: SceneNode) =>
+      // Разворачиваем возможные обертки страницы (до 3 уровней)
+      let container: any = root;
+      let depth = 0;
+      while (
+        "children" in container &&
+        Array.isArray(container.children) &&
+        depth < 3
+      ) {
+        const directContainers = (container.children as SceneNode[]).filter(
+          (c) =>
             !c.removed &&
             c.visible !== false &&
             "children" in c &&
             !isSvgCandidate(c),
         );
+        if (directContainers.length === 1 && container.children.length <= 2) {
+          container = directContainers[0];
+          depth++;
+        } else {
+          break;
+        }
+      }
 
-        if (childBlocks.length > 0) {
+      // Извлекаем дочерние блоки (секции): Frame, Group, Component, Instance, Section
+      if ("children" in container && Array.isArray(container.children)) {
+        const childBlocks = (container.children as SceneNode[]).filter(
+          (c) =>
+            !c.removed &&
+            c.visible !== false &&
+            "children" in c &&
+            ("height" in c && typeof c.height === "number" ? c.height > 20 : true) &&
+            !isSvgCandidate(c),
+        );
+
+        if (childBlocks.length >= 2) {
           sections.push(...childBlocks);
           continue;
         }
@@ -874,27 +829,29 @@ export async function extractFromNodes(
     }
   }
 
-  // 3. Экспорт картинок
+  // 3. Экспорт картинок (безопасное ограничение до 50)
   const images: ImageItem[] = [];
-  for (const c of uniqueCandidates) {
+  for (const c of uniqueCandidates.slice(0, 50)) {
     const dataUrl = await exportNodeAsDataUrl(c.node);
-    images.push({
-      id: c.node.id,
-      name: c.node.name,
-      imageHash: c.imageHash,
-      width: Math.round("width" in c.node ? (c.node as LayoutMixin).width : 0),
-      height: Math.round(
-        "height" in c.node ? (c.node as LayoutMixin).height : 0,
-      ),
-      scaleMode: c.scaleMode,
-      data: dataUrl || "",
-    });
+    if (dataUrl) {
+      images.push({
+        id: c.node.id,
+        name: c.node.name,
+        imageHash: c.imageHash,
+        width: Math.round("width" in c.node ? (c.node as LayoutMixin).width : 0),
+        height: Math.round(
+          "height" in c.node ? (c.node as LayoutMixin).height : 0,
+        ),
+        scaleMode: c.scaleMode,
+        data: dataUrl,
+      });
+    }
   }
 
-  // 4. Экспорт SVG / Иконок
+  // 4. Экспорт SVG / Иконок (безопасное ограничение до 60)
   const seenSvgIds = new Set<string>();
   const svgs: SvgItem[] = [];
-  for (const node of rawSvgCandidates) {
+  for (const node of rawSvgCandidates.slice(0, 60)) {
     if (seenSvgIds.has(node.id)) continue;
     seenSvgIds.add(node.id);
 
